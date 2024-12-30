@@ -37,7 +37,7 @@ const SearchComponent: React.FC = () => {
       flexDirection="column"
       gap={2}
       sx={{
-        width: "100%",
+        width: "100vw",
         maxWidth: "1600px",
         margin: "2% auto",
         padding: 2,
