@@ -15,6 +15,12 @@ import { setSearchCategories } from "../app/searchCategories/searchCategoriesSli
 import { setSearchAvailability } from "../app/searchAvailability/searchAvailabilitySlice";
 
 const SearchComponent: React.FC = () => {
+  const products = useSelector(
+    (state: RootState) => state.products.currentProducts
+  );
+  const categories = Array.from(
+    new Set(products.map((product) => product.category))
+  );
   const searchName = useSelector((state: RootState) => state.searchName.value);
   const searchCategories = useSelector(
     (state: RootState) => state.searchCategories.value
@@ -24,7 +30,6 @@ const SearchComponent: React.FC = () => {
   );
   const dispatch = useDispatch();
 
-  const categoryOptions = ["Category 1", "Category 2", "Category 3"];
   const availabilityOptions = ["All", "In Stock", "Out of stock"];
 
   const handleSubmit = () => {
@@ -41,7 +46,7 @@ const SearchComponent: React.FC = () => {
         maxWidth: "1600px",
         margin: "2% auto",
         padding: 2,
-        border: "1px solid black", // Borde negro
+        border: "1px solid black",
         borderRadius: 2,
       }}
     >
@@ -64,7 +69,7 @@ const SearchComponent: React.FC = () => {
             onChange={(e) => dispatch(setSearchCategories(e.target.value))}
             label="Category"
           >
-            {categoryOptions.map((category) => (
+            {categories.map((category) => (
               <MenuItem key={category} value={category}>
                 {category}
               </MenuItem>
@@ -100,8 +105,6 @@ const SearchComponent: React.FC = () => {
           Search
         </Button>
       </Box>
-
-      {/* Botón Search */}
     </Box>
   );
 };

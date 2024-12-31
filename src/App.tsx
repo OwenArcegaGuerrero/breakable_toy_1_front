@@ -3,6 +3,8 @@ import SearchComponent from "./components/SearchComponent";
 import NewProductComponent from "./components/NewProductComponent";
 import { CssBaseline, GlobalStyles } from "@mui/material";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
+import DataTable from "./components/DataTableComponent";
+import ReportTable from "./components/ReportTableComponent";
 
 const App: React.FC = () => {
   const theme = createTheme();
@@ -21,6 +23,8 @@ const App: React.FC = () => {
       <div>
         <SearchComponent />
         <NewProductComponent />
+        <DataTable />
+        <ReportTable />
       </div>
     </ThemeProvider>
   );

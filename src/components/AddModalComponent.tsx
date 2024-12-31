@@ -18,7 +18,6 @@ import { RootState } from "../app/store";
 import {
   closeAddModal,
   hideNewCategory,
-  openAddModal,
   resetAddState,
   setAddCategory,
   setAddExpirationDate,
@@ -28,10 +27,14 @@ import {
   setAddUnitPrice,
   showNewCategory,
 } from "../app/addModal/addModalSlice";
-import dayjs from "dayjs";
 
 const AddModalComponent: React.FC = () => {
-  const addModal = useSelector((state: RootState) => state.addModal.value);
+  const products = useSelector(
+    (state: RootState) => state.products.currentProducts
+  );
+  const categories = Array.from(
+    new Set(products.map((product) => product.category))
+  );
   const addName = useSelector((state: RootState) => state.addModal.addName);
   const addCategory = useSelector(
     (state: RootState) => state.addModal.addCategory
@@ -82,8 +85,6 @@ const AddModalComponent: React.FC = () => {
         <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
           Add New Product
         </Typography>
-
-        {/* Input para Name */}
         <TextField
           label="Name"
           variant="outlined"
@@ -92,8 +93,6 @@ const AddModalComponent: React.FC = () => {
           fullWidth
           sx={{ mb: 2 }}
         />
-
-        {/* Select para Category */}
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel>Category</InputLabel>
           <Select
@@ -109,13 +108,16 @@ const AddModalComponent: React.FC = () => {
               }
             }}
           >
-            <MenuItem value="test">Test</MenuItem>
-            <MenuItem value="test">Test</MenuItem>
-            <MenuItem value="add-new-category">Add New Category</MenuItem>
+            {categories.map((category) => (
+              <MenuItem key={category} value={category}>
+                {category}
+              </MenuItem>
+            ))}
+            <MenuItem key={"newCategory"} value="add-new-category">
+              Add New Category
+            </MenuItem>
           </Select>
         </FormControl>
-
-        {/* Input para agregar una nueva categoría */}
         {isCategoryOpen && (
           <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
             <TextField
@@ -127,7 +129,6 @@ const AddModalComponent: React.FC = () => {
             />
           </Box>
         )}
-        {/* Input para Stock */}
         <TextField
           label="Stock"
           variant="outlined"
@@ -137,8 +138,6 @@ const AddModalComponent: React.FC = () => {
           onChange={(e) => dispatch(setAddStock(parseInt(e.target.value)))}
           sx={{ mb: 2 }}
         />
-
-        {/* Input para Unit Price */}
         <TextField
           label="Unit Price"
           variant="outlined"
@@ -150,22 +149,19 @@ const AddModalComponent: React.FC = () => {
           }
           sx={{ mb: 2 }}
         />
-
-        {/* Input para Expiration Date */}
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <DatePicker
             label="Expiration Date"
             sx={{ width: "100%", mb: 2 }}
-            value={addExpirationDate ? dayjs(addExpirationDate) : null}
+            value={addExpirationDate ? addExpirationDate : null}
             onChange={(date) => {
               if (date) {
-                dispatch(setAddExpirationDate(date.format("YYYY-MM-DD")));
+                dispatch(setAddExpirationDate(date));
               }
             }}
+            format="DD/MM/YYYY"
           />
         </LocalizationProvider>
-
-        {/* Botones para Guardar y Cancelar */}
         <Box sx={{ display: "flex", justifyContent: "center" }} gap={5}>
           <Button
             variant="contained"
