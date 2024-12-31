@@ -22,7 +22,12 @@ const NewProductComponent: React.FC = () => {
         paddingX: 12,
       }}
     >
-      <Button variant="outlined" sx={{ height: "48px" }} onClick={handleSubmit}>
+      <Button
+        variant="contained"
+        color="success"
+        sx={{ height: "48px" }}
+        onClick={handleSubmit}
+      >
         New Product
       </Button>
       {addModal && <AddModalComponent />}

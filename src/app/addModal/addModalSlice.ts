@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { Dayjs } from "dayjs";
 
 interface addModal {
   value: boolean;
@@ -8,7 +9,7 @@ interface addModal {
   isNewCategoryOpen: boolean;
   addStock: number;
   addUnitPrice: number;
-  addExpirationDate: string;
+  addExpirationDate: Dayjs | null;
 }
 
 const initialState: addModal = {
@@ -19,7 +20,7 @@ const initialState: addModal = {
   isNewCategoryOpen: false,
   addStock: 0,
   addUnitPrice: 0,
-  addExpirationDate: "",
+  addExpirationDate: null,
 };
 
 const addModalSlice = createSlice({
@@ -53,7 +54,7 @@ const addModalSlice = createSlice({
     setAddUnitPrice: (state, action: PayloadAction<number>) => {
       state.addUnitPrice = action.payload;
     },
-    setAddExpirationDate: (state, action: PayloadAction<string>) => {
+    setAddExpirationDate: (state, action: PayloadAction<Dayjs | null>) => {
       state.addExpirationDate = action.payload;
     },
     resetAddState: () => initialState,
