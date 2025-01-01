@@ -10,9 +10,11 @@ import {
   TableSortLabel,
   Box,
   Button,
+  Checkbox,
+  Pagination,
 } from "@mui/material";
 import { Product } from "../types/Product";
-import { RootState } from "../app/store";
+import { AppDispatch, RootState } from "../app/store";
 import { useDispatch, useSelector } from "react-redux";
 import {
   openAddModal,
@@ -23,6 +25,11 @@ import {
   setAddUnitPrice,
 } from "../app/addModal/addModalSlice";
 import dayjs from "dayjs";
+import { getAllProducts } from "../app/products/productsSlice";
+import {
+  setIsEditing,
+  setUpdateProductId,
+} from "../app/dataTable/dataTableSlice";
 
 type Order = "asc" | "desc" | null;
 
@@ -41,13 +48,24 @@ const DataTable: React.FC = () => {
   const products = useSelector(
     (state: RootState) => state.products.currentProducts
   );
-  const rows = products;
+  const searchProducts = useSelector(
+    (state: RootState) => state.products.searchedProducts
+  );
+  const isSearching = useSelector(
+    (state: RootState) => state.products.isSearching
+  );
+  const rows = isSearching ? searchProducts : products;
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     primary: { field: null, order: null },
     secondary: { field: null, order: null },
   });
+  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(
+    new Set()
+  );
+  const [page, setPage] = useState(1);
+  const rowsPerPage = 10;
 
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
 
   const handleEditProduct = (product: Product) => {
     dispatch(openAddModal());
@@ -58,9 +76,90 @@ const DataTable: React.FC = () => {
     dispatch(setAddUnitPrice(product.unitPrice));
   };
 
-  const handleDeleteProduct = () => {
-    console.log(products[3].expirationDate?.diff(dayjs(), "days"));
-    alert("Se ha borrado el producto");
+  const deleteProduct = async (id: number) => {
+    await fetch("http://localhost:9090/products/delete/" + id, {
+      method: "DELETE",
+    }).then((response) => {
+      if (response.status == 204) {
+        alert("Product deleted successfully");
+      } else {
+        alert("Error while deleting product");
+      }
+    });
+    dispatch(getAllProducts());
+  };
+
+  const handleDeleteProduct = (id: number) => {
+    deleteProduct(id);
+  };
+
+  const handleIsAllCheck = () => {
+    const headerState = getHeaderCheckboxState();
+    if (headerState === "indeterminate" || headerState === true) {
+      setSelectedProducts(new Set());
+      Array.from(selectedProducts).map((id) => {
+        setProductInStock(id);
+      });
+    } else {
+      const allIds = getCurrentPageRows().map((row) => row.id as number);
+      setSelectedProducts(new Set(allIds));
+      getCurrentPageRows().map((product) => {
+        setProductOutOfStock(product.id as number);
+      });
+    }
+  };
+
+  const getHeaderCheckboxState = () => {
+    const currentPageRows = getCurrentPageRows();
+    const selectedOnCurrentPage = new Set(
+      Array.from(selectedProducts).filter((id) =>
+        currentPageRows.some((row) => row.id === id)
+      )
+    );
+    if (selectedOnCurrentPage.size === 0) return false;
+    if (selectedOnCurrentPage.size === currentPageRows.length) return true;
+    return "indeterminate";
+  };
+
+  const setProductOutOfStock = async (productId: number) => {
+    await fetch(`http://localhost:9090/products/${productId}/outofstock`, {
+      method: "POST",
+    });
+    dispatch(getAllProducts());
+  };
+
+  const setProductInStock = async (productId: number) => {
+    await fetch(`http://localhost:9090/products/${productId}/instock`, {
+      method: "PUT",
+    });
+    dispatch(getAllProducts());
+  };
+
+  const handleProductSelect = (productId: number) => {
+    setSelectedProducts((prev) => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(productId)) {
+        setProductInStock(productId);
+        newSelected.delete(productId);
+      } else {
+        setProductOutOfStock(productId);
+        newSelected.add(productId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handlePageChange = (
+    event: React.ChangeEvent<unknown>,
+    value: number
+  ) => {
+    setPage(value);
+  };
+
+  const getCurrentPageRows = () => {
+    const sortedRows = sortData(rows);
+    const start = (page - 1) * rowsPerPage;
+    return sortedRows.slice(start, start + rowsPerPage);
   };
 
   const getNextSortOrder = (currentOrder: Order): Order => {
@@ -191,10 +290,10 @@ const DataTable: React.FC = () => {
     return null;
   };
 
-  const getExpirationColor = (expirationDate: dayjs.Dayjs | null): string => {
+  const getExpirationColor = (expirationDate: string | null): string => {
     if (!expirationDate) return "inherit";
 
-    const daysUntilExpiration = expirationDate.diff(dayjs(), "days");
+    const daysUntilExpiration = dayjs(expirationDate).diff(dayjs(), "days");
 
     if (daysUntilExpiration < 7) return "#FFC3C3";
     if (daysUntilExpiration < 14) return "#FBFF9C";
@@ -207,115 +306,158 @@ const DataTable: React.FC = () => {
     return "inherit";
   };
 
-  const sortedData = sortData(rows);
+  const currentPageRows = getCurrentPageRows();
+  const totalPages = Math.ceil(rows.length / rowsPerPage);
 
   return (
-    <TableContainer
-      sx={{
-        width: "90vw",
-        margin: "2% auto",
-      }}
-      component={Paper}
-    >
-      <Table sx={{ border: "1px solid black" }}>
-        <TableHead>
-          <TableRow>
-            <TableCell align="center">
-              <TableSortLabel
-                active={getSortDirection("category") !== null}
-                direction={getSortDirection("category") || "asc"}
-                onClick={() => handleSort("category")}
-              >
-                <b>Category</b>
-              </TableSortLabel>
-            </TableCell>
-            <TableCell align="center">
-              <TableSortLabel
-                active={getSortDirection("name") !== null}
-                direction={getSortDirection("name") || "asc"}
-                onClick={() => handleSort("name")}
-              >
-                <b>Name</b>
-              </TableSortLabel>
-            </TableCell>
-            <TableCell align="center">
-              <TableSortLabel
-                active={getSortDirection("unitPrice") !== null}
-                direction={getSortDirection("unitPrice") || "asc"}
-                onClick={() => handleSort("unitPrice")}
-              >
-                <b>Price</b>
-              </TableSortLabel>
-            </TableCell>
-            <TableCell align="center">
-              <TableSortLabel
-                active={getSortDirection("expirationDate") !== null}
-                direction={getSortDirection("expirationDate") || "asc"}
-                onClick={() => handleSort("expirationDate")}
-              >
-                <b>Expiration Date</b>
-              </TableSortLabel>
-            </TableCell>
-            <TableCell align="center">
-              <TableSortLabel
-                active={getSortDirection("quantityInStock") !== null}
-                direction={getSortDirection("quantityInStock") || "asc"}
-                onClick={() => handleSort("quantityInStock")}
-              >
-                <b>Stock</b>
-              </TableSortLabel>
-            </TableCell>
-            <TableCell align="center">
-              <b>Actions</b>
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {sortedData.map((row) => (
-            <TableRow
-              sx={{
-                backgroundColor: getExpirationColor(row.expirationDate),
-              }}
-              key={row.id}
-            >
-              <TableCell align="center">{row.category}</TableCell>
-              <TableCell align="center">{row.name}</TableCell>
-              <TableCell align="center">${row.unitPrice.toFixed(2)}</TableCell>
-              <TableCell align="center">
-                {row.expirationDate != null
-                  ? row.expirationDate.format("DD/MM/YYYY")
-                  : null}
-              </TableCell>
+    <Box>
+      <TableContainer
+        sx={{
+          width: "90vw",
+          margin: "2% auto",
+        }}
+        component={Paper}
+      >
+        <Table sx={{ border: "1px solid black" }}>
+          <TableHead>
+            <TableRow>
               <TableCell
+                sx={{ border: "1px solid black" }}
                 align="center"
-                sx={{
-                  background: getStockColor(row.quantityInStock),
-                }}
+                width={"10px"}
               >
-                {row.quantityInStock}
+                <Checkbox
+                  checked={getHeaderCheckboxState() === true}
+                  indeterminate={getHeaderCheckboxState() === "indeterminate"}
+                  onChange={handleIsAllCheck}
+                ></Checkbox>
               </TableCell>
-              <TableCell align="center">
-                <Box display={"flex"} gap={3} justifyContent={"center"}>
-                  <Button
-                    variant="contained"
-                    onClick={() => handleEditProduct(row)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={handleDeleteProduct}
-                  >
-                    Delete
-                  </Button>
-                </Box>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <TableSortLabel
+                  active={getSortDirection("category") !== null}
+                  direction={getSortDirection("category") || "asc"}
+                  onClick={() => handleSort("category")}
+                >
+                  <b>Category</b>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <TableSortLabel
+                  active={getSortDirection("name") !== null}
+                  direction={getSortDirection("name") || "asc"}
+                  onClick={() => handleSort("name")}
+                >
+                  <b>Name</b>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <TableSortLabel
+                  active={getSortDirection("unitPrice") !== null}
+                  direction={getSortDirection("unitPrice") || "asc"}
+                  onClick={() => handleSort("unitPrice")}
+                >
+                  <b>Price</b>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <TableSortLabel
+                  active={getSortDirection("expirationDate") !== null}
+                  direction={getSortDirection("expirationDate") || "asc"}
+                  onClick={() => handleSort("expirationDate")}
+                >
+                  <b>Expiration Date</b>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <TableSortLabel
+                  active={getSortDirection("quantityInStock") !== null}
+                  direction={getSortDirection("quantityInStock") || "asc"}
+                  onClick={() => handleSort("quantityInStock")}
+                >
+                  <b>Stock</b>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <b>Actions</b>
               </TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+          </TableHead>
+          <TableBody>
+            {currentPageRows.map((row) => (
+              <TableRow
+                sx={{
+                  backgroundColor: getExpirationColor(row.expirationDate),
+                }}
+                key={row.id}
+              >
+                <TableCell sx={{ border: "1px solid black" }} align="center">
+                  <Checkbox
+                    checked={selectedProducts.has(row.id as number)}
+                    onChange={() => handleProductSelect(row.id as number)}
+                  ></Checkbox>
+                </TableCell>
+                <TableCell sx={{ border: "1px solid black" }} align="center">
+                  {row.category}
+                </TableCell>
+                <TableCell sx={{ border: "1px solid black" }} align="center">
+                  {row.name}
+                </TableCell>
+                <TableCell sx={{ border: "1px solid black" }} align="center">
+                  ${(row.unitPrice as Number).toFixed(2)}
+                </TableCell>
+                <TableCell sx={{ border: "1px solid black" }} align="center">
+                  {row.expirationDate != null ? row.expirationDate : "N/A"}
+                </TableCell>
+                <TableCell
+                  align="center"
+                  sx={{
+                    background: getStockColor(row.quantityInStock as number),
+                    border: "1px solid black",
+                  }}
+                >
+                  {row.quantityInStock}
+                </TableCell>
+                <TableCell sx={{ border: "1px solid black" }} align="center">
+                  <Box display={"flex"} gap={3} justifyContent={"center"}>
+                    <Button
+                      variant="contained"
+                      onClick={() => {
+                        dispatch(setUpdateProductId(row.id ? row.id : 0));
+                        dispatch(setIsEditing(true));
+                        handleEditProduct(row);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      onClick={() => handleDeleteProduct(row.id ? row.id : 0)}
+                    >
+                      Delete
+                    </Button>
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          padding: "20px",
+        }}
+      >
+        <Pagination
+          count={totalPages}
+          page={page}
+          onChange={handlePageChange}
+          color="primary"
+        />
+      </Box>
+    </Box>
   );
 };
 

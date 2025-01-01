@@ -33,16 +33,18 @@ const ReportTable: React.FC = () => {
     let overallValueInStock = 0;
 
     products.forEach((product) => {
-      if (product.quantityInStock > 0) {
+      if ((product.quantityInStock as number) > 0) {
         if (!categoryMap[product.category]) {
           categoryMap[product.category] = { totalProducts: 0, totalValue: 0 };
         }
-        categoryMap[product.category].totalProducts += product.quantityInStock;
+        categoryMap[product.category].totalProducts +=
+          product.quantityInStock as number;
         categoryMap[product.category].totalValue +=
-          product.quantityInStock * product.unitPrice;
+          (product.quantityInStock as number) * (product.unitPrice as number);
 
-        overallProductsInStock += product.quantityInStock;
-        overallValueInStock += product.quantityInStock * product.unitPrice;
+        overallProductsInStock += product.quantityInStock as number;
+        overallValueInStock +=
+          (product.quantityInStock as number) * (product.unitPrice as number);
       }
     });
 
@@ -80,38 +82,50 @@ const ReportTable: React.FC = () => {
       <Table sx={{ border: "1px solid black" }}>
         <TableHead>
           <TableRow>
-            <TableCell align="center">Category</TableCell>
-            <TableCell align="center">Total Products in Stock</TableCell>
-            <TableCell align="center">Total Value in Stock</TableCell>
-            <TableCell align="center">Average Price in Stock</TableCell>
+            <TableCell sx={{ border: "1px solid black" }} align="center">
+              <b>Category</b>
+            </TableCell>
+            <TableCell sx={{ border: "1px solid black" }} align="center">
+              <b>Total Products in Stock</b>
+            </TableCell>
+            <TableCell sx={{ border: "1px solid black" }} align="center">
+              <b>Total Value in Stock</b>
+            </TableCell>
+            <TableCell sx={{ border: "1px solid black" }} align="center">
+              <b>Average Price in Stock</b>
+            </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {reports.map((report) => (
             <TableRow key={report.category}>
-              <TableCell align="center">{report.category}</TableCell>
-              <TableCell align="center">{report.totalProducts}</TableCell>
-              <TableCell align="center">
-                {report.totalValue.toFixed(2)}
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                {report.category}
               </TableCell>
-              <TableCell align="center">
-                {report.averagePrice.toFixed(2)}
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                {report.totalProducts}
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                ${report.totalValue.toFixed(2)}
+              </TableCell>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                ${report.averagePrice.toFixed(2)}
               </TableCell>
             </TableRow>
           ))}
           {overallReport && (
             <TableRow>
-              <TableCell align="center">
+              <TableCell sx={{ border: "1px solid black" }} align="center">
                 <b>{overallReport.category}</b>
               </TableCell>
-              <TableCell align="center">
+              <TableCell sx={{ border: "1px solid black" }} align="center">
                 <b>{overallReport.totalProducts}</b>
               </TableCell>
-              <TableCell align="center">
-                <b>{overallReport.totalValue.toFixed(2)}</b>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <b>${overallReport.totalValue.toFixed(2)}</b>
               </TableCell>
-              <TableCell align="center">
-                <b>{overallReport.averagePrice.toFixed(2)}</b>
+              <TableCell sx={{ border: "1px solid black" }} align="center">
+                <b>${overallReport.averagePrice.toFixed(2)}</b>
               </TableCell>
             </TableRow>
           )}

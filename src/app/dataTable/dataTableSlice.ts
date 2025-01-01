@@ -7,6 +7,8 @@ interface dataTableState {
   rows: Product[];
   arrowPosition: "up" | "down";
   sorting: boolean;
+  isEditing: boolean;
+  updateProductId: number | string;
 }
 
 const initialState: dataTableState = {
@@ -15,6 +17,8 @@ const initialState: dataTableState = {
   rows: [],
   arrowPosition: "up",
   sorting: false,
+  isEditing: false,
+  updateProductId: "",
 };
 
 const dataTableSlice = createSlice({
@@ -30,8 +34,14 @@ const dataTableSlice = createSlice({
     setArrowPosition: (state, action: PayloadAction<"up" | "down">) => {
       state.arrowPosition = action.payload;
     },
-    setSorting: (stat, action: PayloadAction<boolean>) => {
-      stat.sorting = action.payload;
+    setSorting: (state, action: PayloadAction<boolean>) => {
+      state.sorting = action.payload;
+    },
+    setIsEditing: (state, action: PayloadAction<boolean>) => {
+      state.isEditing = action.payload;
+    },
+    setUpdateProductId: (state, action: PayloadAction<number | string>) => {
+      state.updateProductId = action.payload;
     },
   },
 });
@@ -41,5 +51,7 @@ export const {
   setRows,
   setArrowPosition,
   setSorting,
+  setIsEditing,
+  setUpdateProductId,
 } = dataTableSlice.actions;
 export default dataTableSlice.reducer;

@@ -9,10 +9,15 @@ import {
   FormControl,
 } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
-import { RootState } from "../app/store";
+import { AppDispatch, RootState } from "../app/store";
 import { setSearchName } from "../app/searchName/searchNameSlice";
 import { setSearchCategories } from "../app/searchCategories/searchCategoriesSlice";
 import { setSearchAvailability } from "../app/searchAvailability/searchAvailabilitySlice";
+import {
+  getAllProducts,
+  setIsSearching,
+  setSearchedProducts,
+} from "../app/products/productsSlice";
 
 const SearchComponent: React.FC = () => {
   const products = useSelector(
@@ -28,12 +33,34 @@ const SearchComponent: React.FC = () => {
   const searchAvailability = useSelector(
     (state: RootState) => state.searchAvailability.value
   );
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
 
-  const availabilityOptions = ["All", "In Stock", "Out of stock"];
+  const availabilityOptions = ["All", "In stock", "Out of stock"];
+
+  const sendSearch = async () => {
+    let uri = "http://localhost:9090/products?";
+    uri += searchName != "" ? "&name=" + searchName : "";
+    uri += searchCategories != "" ? "&category=" + searchCategories : "";
+    uri +=
+      searchAvailability != "" ? "&availability=" + searchAvailability : "";
+    const products = await fetch(uri)
+      .then((response) => response.json())
+      .then((data) => data);
+    dispatch(setSearchedProducts(products));
+    dispatch(setIsSearching(true));
+  };
 
   const handleSubmit = () => {
-    alert("Se ha enviado el formulario");
+    if (
+      searchName === "" &&
+      searchCategories.length === 0 &&
+      searchAvailability === ""
+    ) {
+      dispatch(getAllProducts());
+      dispatch(setIsSearching(false));
+    } else {
+      sendSearch();
+    }
   };
 
   return (
