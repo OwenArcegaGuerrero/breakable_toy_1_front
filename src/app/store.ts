@@ -15,13 +15,6 @@ export const store = configureStore({
     dataTable: dataTableReducer,
     products: productsReducer,
   },
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware({
-      serializableCheck: {
-        ignoredActions: ["addModal/setAddExpirationDate"],
-        ignoredPaths: ["products", "addModal"],
-      },
-    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

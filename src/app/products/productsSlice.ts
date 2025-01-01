@@ -1,60 +1,54 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { Product } from "../../types/Product";
-import dayjs from "dayjs";
 
 interface Products {
   currentProducts: Product[];
+  searchedProducts: Product[];
+  isSearching: boolean;
 }
 
 const initialState: Products = {
-  currentProducts: [
-    {
-      id: 1,
-      name: "Manzana",
-      category: "Fruta",
-      unitPrice: 10,
-      expirationDate: dayjs("2025-01-07"),
-      quantityInStock: 11,
-    },
-    {
-      id: 2,
-      name: "Pera",
-      category: "Fruta",
-      unitPrice: 10,
-      expirationDate: dayjs("2025-01-10"),
-      quantityInStock: 10,
-    },
-    {
-      id: 3,
-      name: "Pera",
-      category: "Snack",
-      unitPrice: 10,
-      expirationDate: dayjs("2025-10-01"),
-      quantityInStock: 4,
-    },
-    {
-      id: 4,
-      name: "Pera",
-      category: "Snack",
-      unitPrice: 15,
-      expirationDate: dayjs("2025-12-11"),
-      quantityInStock: 10,
-    },
-    {
-      id: 5,
-      name: "Pera",
-      category: "Snack",
-      unitPrice: 10,
-      expirationDate: dayjs("2025-12-11"),
-      quantityInStock: 20,
-    },
-  ],
+  currentProducts: [],
+  searchedProducts: [],
+  isSearching: false,
 };
 
 const productsSlice = createSlice({
   name: "products",
   initialState,
-  reducers: {},
+  reducers: {
+    setProducts: (state, action: PayloadAction<Product[]>) => {
+      state.currentProducts = action.payload;
+    },
+    setSearchedProducts: (state, action: PayloadAction<Product[]>) => {
+      state.searchedProducts = action.payload;
+    },
+    setIsSearching: (state, action: PayloadAction<boolean>) => {
+      state.isSearching = action.payload;
+    },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(
+      getAllProducts.fulfilled,
+      (state, action: PayloadAction<Product[]>) => {
+        state.currentProducts = action.payload;
+      }
+    );
+  },
 });
 
+export const getAllProducts = createAsyncThunk(
+  "products/getAllProducts",
+  async () => {
+    const data = await fetch("http://localhost:9090/products")
+      .then((response) => response.json())
+      .then((data) => {
+        return data;
+      });
+    return data;
+  }
+);
+
+export const { setProducts, setSearchedProducts, setIsSearching } =
+  productsSlice.actions;
 export default productsSlice.reducer;

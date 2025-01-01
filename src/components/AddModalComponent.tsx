@@ -14,7 +14,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import React from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { RootState } from "../app/store";
+import { AppDispatch, RootState } from "../app/store";
 import {
   closeAddModal,
   hideNewCategory,
@@ -27,6 +27,9 @@ import {
   setAddUnitPrice,
   showNewCategory,
 } from "../app/addModal/addModalSlice";
+import { Product } from "../types/Product";
+import dayjs from "dayjs";
+import { getAllProducts } from "../app/products/productsSlice";
 
 const AddModalComponent: React.FC = () => {
   const products = useSelector(
@@ -52,18 +55,81 @@ const AddModalComponent: React.FC = () => {
   const isCategoryOpen = useSelector(
     (state: RootState) => state.addModal.isNewCategoryOpen
   );
+  const isEditing = useSelector(
+    (state: RootState) => state.dataTable.isEditing
+  );
+  const updateProductId = useSelector(
+    (state: RootState) => state.dataTable.updateProductId
+  );
 
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
+
+  const saveProduct = async () => {
+    const product: Product = {
+      name: addName,
+      category: addNewCategory != "" ? addNewCategory : addCategory,
+      unitPrice: addUnitPrice != "" ? addUnitPrice : 0,
+      expirationDate: addExpirationDate != null ? addExpirationDate : null,
+      quantityInStock: addStock != "" ? addStock : 0,
+      creationDate: dayjs().format("YYYY-MM-DD"),
+      updateDate: null,
+    };
+    fetch("http://localhost:9090/products", {
+      method: "POST",
+      body: JSON.stringify(product),
+      headers: {
+        "content-type": "application/json",
+      },
+    }).then((response) => {
+      if (response.status == 201) {
+        alert("Product added successfully");
+        dispatch(getAllProducts());
+      } else {
+        alert("Error while adding product");
+      }
+    });
+  };
+
+  const updateProduct = async (id: number) => {
+    const product: Product = {
+      name: addName,
+      category: addNewCategory != "" ? addNewCategory : addCategory,
+      unitPrice: addUnitPrice != "" ? addUnitPrice : 0,
+      expirationDate: addExpirationDate != null ? addExpirationDate : null,
+      quantityInStock: addStock != "" ? addStock : 0,
+      creationDate: dayjs().format("YYYY-MM-DD"),
+      updateDate: null,
+    };
+    fetch("http://localhost:9090/products/update/" + id, {
+      method: "PUT",
+      body: JSON.stringify(product),
+      headers: {
+        "content-type": "application/json",
+      },
+    }).then((result) => {
+      if (result.status == 204) {
+        alert("Product updated successfully");
+        dispatch(getAllProducts());
+      } else {
+        alert("Error while updating product");
+      }
+    });
+  };
 
   const handleCancel = () => {
     dispatch(closeAddModal());
     dispatch(resetAddState());
   };
 
+  const handleUpdate = (id: number) => {
+    dispatch(closeAddModal());
+    updateProduct(id);
+  };
+
   const handleSave = () => {
     dispatch(closeAddModal());
     dispatch(resetAddState());
-    alert("Se ha guardado el producto");
+    saveProduct();
   };
 
   return (
@@ -153,10 +219,10 @@ const AddModalComponent: React.FC = () => {
           <DatePicker
             label="Expiration Date"
             sx={{ width: "100%", mb: 2 }}
-            value={addExpirationDate ? addExpirationDate : null}
+            value={addExpirationDate ? dayjs(addExpirationDate) : null}
             onChange={(date) => {
               if (date) {
-                dispatch(setAddExpirationDate(date));
+                dispatch(setAddExpirationDate(date.format("YYYY-MM-DD")));
               }
             }}
             format="DD/MM/YYYY"
@@ -166,10 +232,14 @@ const AddModalComponent: React.FC = () => {
           <Button
             variant="contained"
             color="primary"
-            onClick={handleSave}
+            onClick={() => {
+              isEditing
+                ? handleUpdate(updateProductId as number)
+                : handleSave();
+            }}
             sx={{ width: "33%", height: "48px" }}
           >
-            Save
+            {isEditing ? "Update" : "Save"}
           </Button>
           <Button
             variant="outlined"
