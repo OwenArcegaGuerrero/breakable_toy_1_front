@@ -8,11 +8,12 @@ import {
   Select,
   MenuItem,
   Button,
+  FormHelperText,
 } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import React from "react";
+import React, { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "../app/store";
 import {
@@ -62,9 +63,98 @@ const AddModalComponent: React.FC = () => {
     (state: RootState) => state.dataTable.updateProductId
   );
 
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [stockError, setStockError] = useState<string | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [newCategorryError, setNewCategoryError] = useState<string | null>(
+    null
+  );
+
   const dispatch = useDispatch<AppDispatch>();
 
+  const validateAddName = (name: string) => {
+    if (name.length > 120) {
+      setNameError("Name must be less than 121 characteres");
+      return false;
+    }
+    setNameError(null);
+    return true;
+  };
+
+  const validateAddStock = (stock: number) => {
+    if (stock < 0) {
+      setStockError("Stock must be a non-negative number");
+      return false;
+    }
+    setStockError(null);
+    return true;
+  };
+
+  const validateAddPrice = (price: number) => {
+    if (price <= 0) {
+      setPriceError("Price must be a positive number");
+      return false;
+    }
+    setPriceError(null);
+    return true;
+  };
+
+  const validateNewCategory = (newCategory: string) => {
+    if (isCategoryOpen && newCategory === "") {
+      setNewCategoryError("Please add a new category");
+      return false;
+    }
+    setNewCategoryError(null);
+    return true;
+  };
+
+  const handleAddNameChange = (name: string) => {
+    if (validateAddName(name)) {
+      dispatch(setAddName(name));
+    }
+  };
+
+  const handleAddStockChange = (stock: number) => {
+    if (validateAddStock(stock)) {
+      dispatch(setAddStock(stock));
+    }
+  };
+
+  const handleAddPriceChange = (price: number) => {
+    if (validateAddPrice(price)) {
+      dispatch(setAddUnitPrice(price));
+    }
+  };
+
+  const handleAddNewCategoryChange = (newCategory: string) => {
+    if (validateNewCategory(newCategory)) {
+      dispatch(setAddNewCategory(newCategory));
+    }
+  };
+
   const saveProduct = async () => {
+    if (addName === "") {
+      setNameError("Please add a name");
+      return false;
+    }
+    if (addStock === "") {
+      setStockError("Please add a stock");
+      return false;
+    }
+    if (addUnitPrice === "") {
+      setPriceError("Please add a price");
+      return false;
+    }
+    if (!isCategoryOpen && addCategory === "") {
+      setCategoryError("Please add a category");
+      return false;
+    }
+    if (addNewCategory === "") {
+      setNewCategoryError("Please add a new category");
+      return false;
+    }
+
     const product: Product = {
       name: addName,
       category: addNewCategory != "" ? addNewCategory : addCategory,
@@ -84,13 +174,37 @@ const AddModalComponent: React.FC = () => {
       if (response.status == 201) {
         alert("Product added successfully");
         dispatch(getAllProducts());
+        dispatch(closeAddModal());
+        dispatch(resetAddState());
       } else {
+        dispatch(closeAddModal());
+        dispatch(resetAddState());
         alert("Error while adding product");
       }
     });
   };
 
   const updateProduct = async (id: number) => {
+    if (addName === "") {
+      setNameError("Please add a name");
+      return false;
+    }
+    if (addStock === "" || isNaN(addStock as number)) {
+      setStockError("Please add a stock");
+      return false;
+    }
+    if (addUnitPrice === "" || isNaN(addUnitPrice as number)) {
+      setPriceError("Please add a price");
+      return false;
+    }
+    if (!isCategoryOpen && addCategory === "") {
+      setCategoryError("Please add a category");
+      return false;
+    }
+    if (addNewCategory === "") {
+      setNewCategoryError("Please add a new category");
+      return false;
+    }
     const product: Product = {
       name: addName,
       category: addNewCategory != "" ? addNewCategory : addCategory,
@@ -110,8 +224,10 @@ const AddModalComponent: React.FC = () => {
       if (result.status == 204) {
         alert("Product updated successfully");
         dispatch(getAllProducts());
+        dispatch(closeAddModal());
       } else {
         alert("Error while updating product");
+        dispatch(closeAddModal());
       }
     });
   };
@@ -121,15 +237,17 @@ const AddModalComponent: React.FC = () => {
     dispatch(resetAddState());
   };
 
-  const handleUpdate = (id: number) => {
-    dispatch(closeAddModal());
-    updateProduct(id);
+  const handleUpdate = async (id: number) => {
+    if (await updateProduct(id)) {
+      dispatch(closeAddModal());
+    }
   };
 
-  const handleSave = () => {
-    dispatch(closeAddModal());
-    dispatch(resetAddState());
-    saveProduct();
+  const handleSave = async () => {
+    if (await saveProduct()) {
+      dispatch(closeAddModal());
+      dispatch(resetAddState());
+    }
   };
 
   return (
@@ -149,17 +267,19 @@ const AddModalComponent: React.FC = () => {
         }}
       >
         <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
-          Add New Product
+          {isEditing ? "Update Product" : "Add New Product"}
         </Typography>
         <TextField
           label="Name"
           variant="outlined"
           value={addName}
-          onChange={(e) => dispatch(setAddName(e.target.value))}
+          onChange={(e) => handleAddNameChange(e.target.value)}
+          error={!!nameError}
+          helperText={nameError || ""}
           fullWidth
           sx={{ mb: 2 }}
         />
-        <FormControl fullWidth sx={{ mb: 2 }}>
+        <FormControl fullWidth sx={{ mb: 2 }} error={!!categoryError}>
           <InputLabel>Category</InputLabel>
           <Select
             label="Category"
@@ -168,11 +288,13 @@ const AddModalComponent: React.FC = () => {
               if (e.target.value === "add-new-category") {
                 dispatch(showNewCategory());
                 dispatch(setAddCategory(e.target.value));
+                setCategoryError(null);
               } else {
                 dispatch(hideNewCategory());
                 dispatch(setAddCategory(e.target.value));
               }
             }}
+            error={!!categoryError}
           >
             {categories.map((category) => (
               <MenuItem key={category} value={category}>
@@ -183,6 +305,11 @@ const AddModalComponent: React.FC = () => {
               Add New Category
             </MenuItem>
           </Select>
+          {!!categoryError ? (
+            <FormHelperText>Please select a category</FormHelperText>
+          ) : (
+            <></>
+          )}
         </FormControl>
         {isCategoryOpen && (
           <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
@@ -191,7 +318,9 @@ const AddModalComponent: React.FC = () => {
               variant="outlined"
               fullWidth
               value={addNewCategory}
-              onChange={(e) => dispatch(setAddNewCategory(e.target.value))}
+              onChange={(e) => handleAddNewCategoryChange(e.target.value)}
+              error={!!newCategorryError}
+              helperText={newCategorryError || ""}
             />
           </Box>
         )}
@@ -201,7 +330,9 @@ const AddModalComponent: React.FC = () => {
           type="number"
           fullWidth
           value={addStock}
-          onChange={(e) => dispatch(setAddStock(parseInt(e.target.value)))}
+          onChange={(e) => handleAddStockChange(parseInt(e.target.value))}
+          error={!!stockError}
+          helperText={stockError || ""}
           sx={{ mb: 2 }}
         />
         <TextField
@@ -210,9 +341,9 @@ const AddModalComponent: React.FC = () => {
           type="number"
           fullWidth
           value={addUnitPrice}
-          onChange={(e) =>
-            dispatch(setAddUnitPrice(parseFloat(e.target.value)))
-          }
+          onChange={(e) => handleAddPriceChange(parseFloat(e.target.value))}
+          error={!!priceError}
+          helperText={priceError || ""}
           sx={{ mb: 2 }}
         />
         <LocalizationProvider dateAdapter={AdapterDayjs}>

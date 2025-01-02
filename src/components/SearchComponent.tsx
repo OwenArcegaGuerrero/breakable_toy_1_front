@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Box,
   TextField,
@@ -35,7 +35,24 @@ const SearchComponent: React.FC = () => {
   );
   const dispatch = useDispatch<AppDispatch>();
 
+  const [nameError, setNameError] = useState<string | null>(null);
+
   const availabilityOptions = ["All", "In stock", "Out of stock"];
+
+  const validateName = (name: string) => {
+    if (name.length > 120) {
+      setNameError("Name must be less than 121 characteres");
+      return false;
+    }
+    setNameError(null);
+    return true;
+  };
+
+  const handleNameChange = (name: string) => {
+    if (validateName(name)) {
+      dispatch(setSearchName(name));
+    }
+  };
 
   const sendSearch = async () => {
     let uri = "http://localhost:9090/products?";
@@ -81,7 +98,9 @@ const SearchComponent: React.FC = () => {
         <TextField
           label="Name"
           value={searchName}
-          onChange={(e) => dispatch(setSearchName(e.target.value))}
+          onChange={(e) => handleNameChange(e.target.value)}
+          error={!!nameError}
+          helperText={nameError || ""}
           variant="outlined"
           fullWidth
           sx={{ flex: 0.5 }}
