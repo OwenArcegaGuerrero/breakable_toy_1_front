@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -12,6 +12,9 @@ import {
   Button,
   Checkbox,
   Pagination,
+  CircularProgress,
+  Alert,
+  Snackbar,
 } from "@mui/material";
 import { Product } from "../types/Product";
 import { AppDispatch, RootState } from "../app/store";
@@ -29,7 +32,13 @@ import { getAllProducts } from "../app/products/productsSlice";
 import {
   setIsEditing,
   setUpdateProductId,
+  toggleProductSelection,
+  setSelectedProducts,
+  clearSelectedProducts,
+  setIsUpdatingStock,
+  setStockUpdateError,
 } from "../app/dataTable/dataTableSlice";
+import { stockService } from "../services/stockService";
 
 type Order = "asc" | "desc" | null;
 
@@ -44,28 +53,167 @@ interface SortConfig {
   };
 }
 
+/**
+ * DataTable component for displaying and managing products
+ */
 const DataTable: React.FC = () => {
-  const products = useSelector(
-    (state: RootState) => state.products.currentProducts
+  const dispatch = useDispatch<AppDispatch>();
+  const {
+    currentProducts: products,
+    searchedProducts,
+    isSearching,
+  } = useSelector((state: RootState) => state.products);
+  const { selectedProducts, isUpdatingStock, stockUpdateError } = useSelector(
+    (state: RootState) => state.dataTable
   );
-  const searchProducts = useSelector(
-    (state: RootState) => state.products.searchedProducts
-  );
-  const isSearching = useSelector(
-    (state: RootState) => state.products.isSearching
-  );
-  const rows = isSearching ? searchProducts : products;
+
+  const rows = isSearching ? searchedProducts : products;
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     primary: { field: null, order: null },
     secondary: { field: null, order: null },
   });
-  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(
-    new Set()
-  );
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
 
-  const dispatch = useDispatch<AppDispatch>();
+  const compareValues = (a: any, b: any): number => {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+
+    if (dayjs.isDayjs(a) && dayjs.isDayjs(b)) {
+      return a.valueOf() - b.valueOf();
+    }
+
+    if (typeof a === "number" && typeof b === "number") {
+      return a - b;
+    }
+
+    if (typeof a === "string" && typeof b === "string") {
+      return a.localeCompare(b, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
+
+    return String(a).localeCompare(String(b));
+  };
+
+  const sortData = useCallback(
+    (data: Product[]): Product[] => {
+      return [...data].sort((a, b) => {
+        let comparison = 0;
+
+        if (sortConfig.primary.field && sortConfig.primary.order) {
+          const aValue = a[sortConfig.primary.field];
+          const bValue = b[sortConfig.primary.field];
+
+          comparison = compareValues(aValue, bValue);
+
+          if (sortConfig.primary.order === "desc") {
+            comparison *= -1;
+          }
+        }
+
+        if (
+          comparison === 0 &&
+          sortConfig.secondary.field &&
+          sortConfig.secondary.order
+        ) {
+          const aValue = a[sortConfig.secondary.field];
+          const bValue = b[sortConfig.secondary.field];
+
+          comparison = compareValues(aValue, bValue);
+
+          if (sortConfig.secondary.order === "desc") {
+            comparison *= -1;
+          }
+        }
+
+        return comparison;
+      });
+    },
+    [sortConfig]
+  );
+
+  const getCurrentPageRows = useCallback(() => {
+    const sortedRows = sortData(rows);
+    const start = (page - 1) * rowsPerPage;
+    return sortedRows.slice(start, start + rowsPerPage);
+  }, [rows, page, rowsPerPage, sortData]);
+
+  /**
+   * Handles the selection/deselection of all products on the current page
+   */
+  const handleIsAllCheck = useCallback(async () => {
+    const currentPageRows = getCurrentPageRows();
+    const currentPageIds = currentPageRows.map((row) => row.id as number);
+    const selectedOnCurrentPage = currentPageIds.filter((id) =>
+      selectedProducts.includes(id)
+    );
+
+    dispatch(setIsUpdatingStock(true));
+    dispatch(setStockUpdateError(null));
+
+    try {
+      if (selectedOnCurrentPage.length === currentPageIds.length) {
+        // Deselect all on current page
+        const newSelected = selectedProducts.filter(
+          (id) => !currentPageIds.includes(id)
+        );
+        dispatch(setSelectedProducts(newSelected));
+        await stockService.bulkUpdateStockStatus(currentPageIds, true);
+      } else {
+        // Select all on current page
+        const newSelected = [
+          ...new Set([...selectedProducts, ...currentPageIds]),
+        ];
+        dispatch(setSelectedProducts(newSelected));
+        await stockService.bulkUpdateStockStatus(currentPageIds, false);
+      }
+      dispatch(getAllProducts());
+    } catch (error) {
+      dispatch(setStockUpdateError((error as Error).message));
+    } finally {
+      dispatch(setIsUpdatingStock(false));
+    }
+  }, [dispatch, selectedProducts, getCurrentPageRows]);
+
+  /**
+   * Gets the state of the header checkbox based on current page selections
+   */
+  const getHeaderCheckboxState = useCallback(() => {
+    const currentPageRows = getCurrentPageRows();
+    const currentPageIds = currentPageRows.map((row) => row.id as number);
+    const selectedOnCurrentPage = currentPageIds.filter((id) =>
+      selectedProducts.includes(id)
+    );
+
+    if (selectedOnCurrentPage.length === 0) return false;
+    if (selectedOnCurrentPage.length === currentPageRows.length) return true;
+    return "indeterminate";
+  }, [selectedProducts, getCurrentPageRows]);
+
+  /**
+   * Handles the selection/deselection of a single product
+   */
+  const handleProductSelect = useCallback(
+    async (productId: number) => {
+      dispatch(setIsUpdatingStock(true));
+      dispatch(setStockUpdateError(null));
+
+      try {
+        const isSelected = selectedProducts.includes(productId);
+        await stockService.bulkUpdateStockStatus([productId], isSelected);
+        dispatch(toggleProductSelection(productId));
+        dispatch(getAllProducts());
+      } catch (error) {
+        dispatch(setStockUpdateError((error as Error).message));
+      } finally {
+        dispatch(setIsUpdatingStock(false));
+      }
+    },
+    [dispatch, selectedProducts]
+  );
 
   const handleEditProduct = (product: Product) => {
     dispatch(openAddModal());
@@ -93,73 +241,11 @@ const DataTable: React.FC = () => {
     deleteProduct(id);
   };
 
-  const handleIsAllCheck = () => {
-    const headerState = getHeaderCheckboxState();
-    if (headerState === "indeterminate" || headerState === true) {
-      setSelectedProducts(new Set());
-      Array.from(selectedProducts).map((id) => {
-        setProductInStock(id);
-      });
-    } else {
-      const allIds = getCurrentPageRows().map((row) => row.id as number);
-      setSelectedProducts(new Set(allIds));
-      getCurrentPageRows().map((product) => {
-        setProductOutOfStock(product.id as number);
-      });
-    }
-  };
-
-  const getHeaderCheckboxState = () => {
-    const currentPageRows = getCurrentPageRows();
-    const selectedOnCurrentPage = new Set(
-      Array.from(selectedProducts).filter((id) =>
-        currentPageRows.some((row) => row.id === id)
-      )
-    );
-    if (selectedOnCurrentPage.size === 0) return false;
-    if (selectedOnCurrentPage.size === currentPageRows.length) return true;
-    return "indeterminate";
-  };
-
-  const setProductOutOfStock = async (productId: number) => {
-    await fetch(`http://localhost:9090/products/${productId}/outofstock`, {
-      method: "POST",
-    });
-    dispatch(getAllProducts());
-  };
-
-  const setProductInStock = async (productId: number) => {
-    await fetch(`http://localhost:9090/products/${productId}/instock`, {
-      method: "PUT",
-    });
-    dispatch(getAllProducts());
-  };
-
-  const handleProductSelect = (productId: number) => {
-    setSelectedProducts((prev) => {
-      const newSelected = new Set(prev);
-      if (newSelected.has(productId)) {
-        setProductInStock(productId);
-        newSelected.delete(productId);
-      } else {
-        setProductOutOfStock(productId);
-        newSelected.add(productId);
-      }
-      return newSelected;
-    });
-  };
-
   const handlePageChange = (
     event: React.ChangeEvent<unknown>,
     value: number
   ) => {
     setPage(value);
-  };
-
-  const getCurrentPageRows = () => {
-    const sortedRows = sortData(rows);
-    const start = (page - 1) * rowsPerPage;
-    return sortedRows.slice(start, start + rowsPerPage);
   };
 
   const getNextSortOrder = (currentOrder: Order): Order => {
@@ -223,63 +309,6 @@ const DataTable: React.FC = () => {
     });
   };
 
-  const compareValues = (a: any, b: any): number => {
-    if (a === null && b === null) return 0;
-    if (a === null) return 1;
-    if (b === null) return -1;
-
-    if (dayjs.isDayjs(a) && dayjs.isDayjs(b)) {
-      return a.valueOf() - b.valueOf();
-    }
-
-    if (typeof a === "number" && typeof b === "number") {
-      return a - b;
-    }
-
-    if (typeof a === "string" && typeof b === "string") {
-      return a.localeCompare(b, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    }
-
-    return String(a).localeCompare(String(b));
-  };
-
-  const sortData = (data: Product[]): Product[] => {
-    return [...data].sort((a, b) => {
-      let comparison = 0;
-
-      if (sortConfig.primary.field && sortConfig.primary.order) {
-        const aValue = a[sortConfig.primary.field];
-        const bValue = b[sortConfig.primary.field];
-
-        comparison = compareValues(aValue, bValue);
-
-        if (sortConfig.primary.order === "desc") {
-          comparison *= -1;
-        }
-      }
-
-      if (
-        comparison === 0 &&
-        sortConfig.secondary.field &&
-        sortConfig.secondary.order
-      ) {
-        const aValue = a[sortConfig.secondary.field];
-        const bValue = b[sortConfig.secondary.field];
-
-        comparison = compareValues(aValue, bValue);
-
-        if (sortConfig.secondary.order === "desc") {
-          comparison *= -1;
-        }
-      }
-
-      return comparison;
-    });
-  };
-
   const getSortDirection = (field: keyof Product): Order => {
     if (sortConfig.primary.field === field) {
       return sortConfig.primary.order;
@@ -311,13 +340,46 @@ const DataTable: React.FC = () => {
 
   return (
     <Box>
+      {stockUpdateError && (
+        <Snackbar
+          open={!!stockUpdateError}
+          autoHideDuration={6000}
+          onClose={() => dispatch(setStockUpdateError(null))}
+        >
+          <Alert
+            severity="error"
+            onClose={() => dispatch(setStockUpdateError(null))}
+          >
+            {stockUpdateError}
+          </Alert>
+        </Snackbar>
+      )}
       <TableContainer
         sx={{
           width: "90vw",
           margin: "2% auto",
+          position: "relative",
         }}
         component={Paper}
       >
+        {isUpdatingStock && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255, 255, 255, 0.7)",
+              zIndex: 1,
+            }}
+          >
+            <CircularProgress />
+          </Box>
+        )}
         <Table sx={{ border: "1px solid black" }}>
           <TableHead>
             <TableRow>
@@ -330,7 +392,8 @@ const DataTable: React.FC = () => {
                   checked={getHeaderCheckboxState() === true}
                   indeterminate={getHeaderCheckboxState() === "indeterminate"}
                   onChange={handleIsAllCheck}
-                ></Checkbox>
+                  disabled={isUpdatingStock}
+                />
               </TableCell>
               <TableCell sx={{ border: "1px solid black" }} align="center">
                 <TableSortLabel
@@ -385,16 +448,20 @@ const DataTable: React.FC = () => {
           <TableBody>
             {currentPageRows.map((row) => (
               <TableRow
+                key={row.id}
                 sx={{
                   backgroundColor: getExpirationColor(row.expirationDate),
+                  textDecorationLine:
+                    row.quantityInStock === 0 ? "line-through" : "inherit",
+                  opacity: isUpdatingStock ? 0.5 : 1,
                 }}
-                key={row.id}
               >
                 <TableCell sx={{ border: "1px solid black" }} align="center">
                   <Checkbox
-                    checked={selectedProducts.has(row.id as number)}
+                    checked={selectedProducts.includes(row.id as number)}
                     onChange={() => handleProductSelect(row.id as number)}
-                  ></Checkbox>
+                    disabled={isUpdatingStock}
+                  />
                 </TableCell>
                 <TableCell sx={{ border: "1px solid black" }} align="center">
                   {row.category}
