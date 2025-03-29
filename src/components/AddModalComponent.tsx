@@ -31,6 +31,7 @@ import {
 import { Product } from "../types/Product";
 import dayjs from "dayjs";
 import { getAllProducts } from "../app/products/productsSlice";
+import { setIsEditing } from "../app/dataTable/dataTableSlice";
 
 const AddModalComponent: React.FC = () => {
   const products = useSelector(
@@ -91,11 +92,7 @@ const AddModalComponent: React.FC = () => {
     return true;
   };
 
-  const validateAddPrice = (price: number) => {
-    if (price <= 0) {
-      setPriceError("Price must be a positive number");
-      return false;
-    }
+  const validateAddPrice = () => {
     setPriceError(null);
     return true;
   };
@@ -122,9 +119,7 @@ const AddModalComponent: React.FC = () => {
   };
 
   const handleAddPriceChange = (price: number) => {
-    if (validateAddPrice(price)) {
-      dispatch(setAddUnitPrice(price));
-    }
+    dispatch(setAddUnitPrice(price));
   };
 
   const handleAddNewCategoryChange = (newCategory: string) => {
@@ -134,6 +129,8 @@ const AddModalComponent: React.FC = () => {
   };
 
   const saveProduct = async () => {
+    console.log("entre");
+
     if (addName === "") {
       setNameError("Please add a name");
       return false;
@@ -148,10 +145,6 @@ const AddModalComponent: React.FC = () => {
     }
     if (!isCategoryOpen && addCategory === "") {
       setCategoryError("Please add a category");
-      return false;
-    }
-    if (addNewCategory === "") {
-      setNewCategoryError("Please add a new category");
       return false;
     }
 
@@ -193,18 +186,12 @@ const AddModalComponent: React.FC = () => {
       setStockError("Please add a stock");
       return false;
     }
-    if (addUnitPrice === "" || isNaN(addUnitPrice as number)) {
-      setPriceError("Please add a price");
-      return false;
-    }
+
     if (!isCategoryOpen && addCategory === "") {
       setCategoryError("Please add a category");
       return false;
     }
-    if (addNewCategory === "") {
-      setNewCategoryError("Please add a new category");
-      return false;
-    }
+
     const product: Product = {
       name: addName,
       category: addNewCategory != "" ? addNewCategory : addCategory,
@@ -225,9 +212,11 @@ const AddModalComponent: React.FC = () => {
         alert("Product updated successfully");
         dispatch(getAllProducts());
         dispatch(closeAddModal());
+        dispatch(setIsEditing(false));
       } else {
         alert("Error while updating product");
         dispatch(closeAddModal());
+        dispatch(setIsEditing(false));
       }
     });
   };
@@ -239,8 +228,9 @@ const AddModalComponent: React.FC = () => {
 
   const handleUpdate = async (id: number) => {
     if (await updateProduct(id)) {
-      dispatch(closeAddModal());
     }
+    dispatch(closeAddModal());
+    dispatch(setIsEditing(false));
   };
 
   const handleSave = async () => {
@@ -341,7 +331,7 @@ const AddModalComponent: React.FC = () => {
           type="number"
           fullWidth
           value={addUnitPrice}
-          onChange={(e) => handleAddPriceChange(parseFloat(e.target.value))}
+          onChange={(e) => handleAddPriceChange(Number(e.target.value))}
           error={!!priceError}
           helperText={priceError || ""}
           sx={{ mb: 2 }}
