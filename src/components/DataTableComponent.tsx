@@ -29,6 +29,9 @@ import { getAllProducts } from "../app/products/productsSlice";
 import {
   setIsEditing,
   setUpdateProductId,
+  setIsUpdatingStock,
+  setSelectedProducts,
+  toggleProductSelection,
 } from "../app/dataTable/dataTableSlice";
 
 type Order = "asc" | "desc" | null;
@@ -54,14 +57,17 @@ const DataTable: React.FC = () => {
   const isSearching = useSelector(
     (state: RootState) => state.products.isSearching
   );
+  const selectedProducts = useSelector(
+    (state: RootState) => state.dataTable.selectedProducts
+  );
+  const isUpdatingStock = useSelector(
+    (state: RootState) => state.dataTable.isUpdatingStock
+  );
   const rows = isSearching ? searchProducts : products;
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     primary: { field: null, order: null },
     secondary: { field: null, order: null },
   });
-  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(
-    new Set()
-  );
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
 
@@ -93,60 +99,104 @@ const DataTable: React.FC = () => {
     deleteProduct(id);
   };
 
-  const handleIsAllCheck = () => {
-    const headerState = getHeaderCheckboxState();
-    if (headerState === "indeterminate" || headerState === true) {
-      setSelectedProducts(new Set());
-      Array.from(selectedProducts).map((id) => {
-        setProductInStock(id);
-      });
-    } else {
-      const allIds = getCurrentPageRows().map((row) => row.id as number);
-      setSelectedProducts(new Set(allIds));
-      getCurrentPageRows().map((product) => {
-        setProductOutOfStock(product.id as number);
-      });
+  const handleIsAllCheck = async () => {
+    const currentPageRows = getCurrentPageRows();
+    const currentPageIds = currentPageRows.map((row) => row.id as number);
+    const selectedOnCurrentPage = new Set(
+      Array.from(selectedProducts).filter((id) => currentPageIds.includes(id))
+    );
+
+    dispatch(setIsUpdatingStock(true));
+    try {
+      if (selectedOnCurrentPage.size === currentPageIds.length) {
+        // Deselect all on current page
+        const newSelected = Array.from(selectedProducts).filter(
+          (id) => !currentPageIds.includes(id)
+        );
+        dispatch(setSelectedProducts(newSelected));
+        // Set all products on current page in stock
+        await Promise.all(currentPageIds.map((id) => setProductInStock(id)));
+      } else {
+        // Select all on current page
+        const newSelected = [
+          ...new Set([...Array.from(selectedProducts), ...currentPageIds]),
+        ];
+        dispatch(setSelectedProducts(newSelected));
+        // Set all products on current page out of stock
+        await Promise.all(currentPageIds.map((id) => setProductOutOfStock(id)));
+      }
+    } catch (error) {
+      console.error("Error updating products:", error);
+      alert("Error updating products. Please try again.");
+    } finally {
+      dispatch(setIsUpdatingStock(false));
+      dispatch(getAllProducts());
     }
   };
 
   const getHeaderCheckboxState = () => {
     const currentPageRows = getCurrentPageRows();
+    const currentPageIds = currentPageRows.map((row) => row.id as number);
     const selectedOnCurrentPage = new Set(
-      Array.from(selectedProducts).filter((id) =>
-        currentPageRows.some((row) => row.id === id)
-      )
+      Array.from(selectedProducts).filter((id) => currentPageIds.includes(id))
     );
+
     if (selectedOnCurrentPage.size === 0) return false;
     if (selectedOnCurrentPage.size === currentPageRows.length) return true;
     return "indeterminate";
   };
 
   const setProductOutOfStock = async (productId: number) => {
-    await fetch(`http://localhost:9090/products/${productId}/outofstock`, {
-      method: "POST",
-    });
-    dispatch(getAllProducts());
+    try {
+      const response = await fetch(
+        `http://localhost:9090/products/${productId}/outofstock`,
+        {
+          method: "POST",
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to set product out of stock");
+      }
+    } catch (error) {
+      console.error("Error setting product out of stock:", error);
+      throw error;
+    }
   };
 
   const setProductInStock = async (productId: number) => {
-    await fetch(`http://localhost:9090/products/${productId}/instock`, {
-      method: "PUT",
-    });
-    dispatch(getAllProducts());
+    try {
+      const response = await fetch(
+        `http://localhost:9090/products/${productId}/instock`,
+        {
+          method: "PUT",
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to set product in stock");
+      }
+    } catch (error) {
+      console.error("Error setting product in stock:", error);
+      throw error;
+    }
   };
 
-  const handleProductSelect = (productId: number) => {
-    setSelectedProducts((prev) => {
-      const newSelected = new Set(prev);
-      if (newSelected.has(productId)) {
-        setProductInStock(productId);
-        newSelected.delete(productId);
+  const handleProductSelect = async (productId: number) => {
+    dispatch(setIsUpdatingStock(true));
+    try {
+      if (selectedProducts.has(productId)) {
+        await setProductInStock(productId);
+        dispatch(toggleProductSelection(productId));
       } else {
-        setProductOutOfStock(productId);
-        newSelected.add(productId);
+        await setProductOutOfStock(productId);
+        dispatch(toggleProductSelection(productId));
       }
-      return newSelected;
-    });
+      dispatch(getAllProducts());
+    } catch (error) {
+      console.error("Error toggling product stock:", error);
+      alert("Error updating product. Please try again.");
+    } finally {
+      dispatch(setIsUpdatingStock(false));
+    }
   };
 
   const handlePageChange = (
@@ -330,7 +380,8 @@ const DataTable: React.FC = () => {
                   checked={getHeaderCheckboxState() === true}
                   indeterminate={getHeaderCheckboxState() === "indeterminate"}
                   onChange={handleIsAllCheck}
-                ></Checkbox>
+                  disabled={isUpdatingStock}
+                />
               </TableCell>
               <TableCell sx={{ border: "1px solid black" }} align="center">
                 <TableSortLabel
@@ -387,6 +438,9 @@ const DataTable: React.FC = () => {
               <TableRow
                 sx={{
                   backgroundColor: getExpirationColor(row.expirationDate),
+                  textDecorationLine:
+                    row.quantityInStock === 0 ? "line-through" : "inherit",
+                  opacity: isUpdatingStock ? 0.5 : 1,
                 }}
                 key={row.id}
               >
@@ -394,7 +448,8 @@ const DataTable: React.FC = () => {
                   <Checkbox
                     checked={selectedProducts.has(row.id as number)}
                     onChange={() => handleProductSelect(row.id as number)}
-                  ></Checkbox>
+                    disabled={isUpdatingStock}
+                  />
                 </TableCell>
                 <TableCell sx={{ border: "1px solid black" }} align="center">
                   {row.category}
