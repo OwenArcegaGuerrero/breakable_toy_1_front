@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -28,7 +28,10 @@ import {
   setAddUnitPrice,
 } from "../app/addModal/addModalSlice";
 import dayjs from "dayjs";
-import { getAllProducts } from "../app/products/productsSlice";
+import {
+  getAllProducts,
+  setCurrentProducts,
+} from "../app/products/productsSlice";
 import {
   setIsEditing,
   setUpdateProductId,
@@ -39,19 +42,22 @@ import {
   setStockUpdateError,
 } from "../app/dataTable/dataTableSlice";
 import { stockService } from "../services/stockService";
+import { PaginationRequest, SortCriteria } from "../types/Pagination";
 
-type Order = "asc" | "desc" | null;
-
-interface SortConfig {
-  primary: {
-    field: keyof Product | null;
-    order: Order;
-  };
-  secondary: {
-    field: keyof Product | null;
-    order: Order;
-  };
-}
+/**
+ * Converts an object to URL parameters, handling null values
+ */
+const objectToURLParams = (
+  obj: Record<string, any>
+): Record<string, string> => {
+  const params: Record<string, string> = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) {
+      params[key] = String(value);
+    }
+  });
+  return params;
+};
 
 /**
  * DataTable component for displaying and managing products
@@ -62,91 +68,59 @@ const DataTable: React.FC = () => {
     currentProducts: products,
     searchedProducts,
     isSearching,
+    totalElements,
   } = useSelector((state: RootState) => state.products);
   const { selectedProducts, isUpdatingStock, stockUpdateError } = useSelector(
     (state: RootState) => state.dataTable
   );
 
-  const rows = isSearching ? searchedProducts : products;
-  const [sortConfig, setSortConfig] = useState<SortConfig>({
-    primary: { field: null, order: null },
-    secondary: { field: null, order: null },
+  const [page, setPage] = useState(0); // Changed to 0-based for backend compatibility
+  const [sortConfig, setSortConfig] = useState<SortCriteria>({
+    sortBy: null,
+    sortOrder: null,
+    secondarySortBy: null,
+    secondarySortOrder: null,
   });
-  const [page, setPage] = useState(1);
   const rowsPerPage = 10;
 
-  const compareValues = (a: any, b: any): number => {
-    if (a === null && b === null) return 0;
-    if (a === null) return 1;
-    if (b === null) return -1;
+  const rows = isSearching ? searchedProducts : products;
 
-    if (dayjs.isDayjs(a) && dayjs.isDayjs(b)) {
-      return a.valueOf() - b.valueOf();
+  /**
+   * Fetches products with current pagination and sorting
+   */
+  const fetchProducts = useCallback(async () => {
+    const pagination: PaginationRequest = {
+      page,
+      size: rowsPerPage,
+    };
+
+    const params = objectToURLParams({
+      ...pagination,
+      ...sortConfig,
+    });
+
+    try {
+      const response = await fetch(
+        `http://localhost:9090/products?${new URLSearchParams(params)}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch products");
+      const data = await response.json();
+      dispatch(setCurrentProducts(data));
+    } catch (error) {
+      console.error("Error fetching products:", error);
     }
+  }, [page, rowsPerPage, sortConfig, dispatch]);
 
-    if (typeof a === "number" && typeof b === "number") {
-      return a - b;
-    }
-
-    if (typeof a === "string" && typeof b === "string") {
-      return a.localeCompare(b, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    }
-
-    return String(a).localeCompare(String(b));
-  };
-
-  const sortData = useCallback(
-    (data: Product[]): Product[] => {
-      return [...data].sort((a, b) => {
-        let comparison = 0;
-
-        if (sortConfig.primary.field && sortConfig.primary.order) {
-          const aValue = a[sortConfig.primary.field];
-          const bValue = b[sortConfig.primary.field];
-
-          comparison = compareValues(aValue, bValue);
-
-          if (sortConfig.primary.order === "desc") {
-            comparison *= -1;
-          }
-        }
-
-        if (
-          comparison === 0 &&
-          sortConfig.secondary.field &&
-          sortConfig.secondary.order
-        ) {
-          const aValue = a[sortConfig.secondary.field];
-          const bValue = b[sortConfig.secondary.field];
-
-          comparison = compareValues(aValue, bValue);
-
-          if (sortConfig.secondary.order === "desc") {
-            comparison *= -1;
-          }
-        }
-
-        return comparison;
-      });
-    },
-    [sortConfig]
-  );
-
-  const getCurrentPageRows = useCallback(() => {
-    const sortedRows = sortData(rows);
-    const start = (page - 1) * rowsPerPage;
-    return sortedRows.slice(start, start + rowsPerPage);
-  }, [rows, page, rowsPerPage, sortData]);
+  // Fetch products when pagination or sorting changes
+  React.useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   /**
    * Handles the selection/deselection of all products on the current page
    */
   const handleIsAllCheck = useCallback(async () => {
-    const currentPageRows = getCurrentPageRows();
-    const currentPageIds = currentPageRows.map((row) => row.id as number);
+    const currentPageIds = rows.map((row) => row.id as number);
     const selectedOnCurrentPage = currentPageIds.filter((id) =>
       selectedProducts.includes(id)
     );
@@ -170,28 +144,27 @@ const DataTable: React.FC = () => {
         dispatch(setSelectedProducts(newSelected));
         await stockService.bulkUpdateStockStatus(currentPageIds, false);
       }
-      dispatch(getAllProducts());
+      fetchProducts();
     } catch (error) {
       dispatch(setStockUpdateError((error as Error).message));
     } finally {
       dispatch(setIsUpdatingStock(false));
     }
-  }, [dispatch, selectedProducts, getCurrentPageRows]);
+  }, [dispatch, selectedProducts, rows, fetchProducts]);
 
   /**
    * Gets the state of the header checkbox based on current page selections
    */
   const getHeaderCheckboxState = useCallback(() => {
-    const currentPageRows = getCurrentPageRows();
-    const currentPageIds = currentPageRows.map((row) => row.id as number);
+    const currentPageIds = rows.map((row) => row.id as number);
     const selectedOnCurrentPage = currentPageIds.filter((id) =>
       selectedProducts.includes(id)
     );
 
     if (selectedOnCurrentPage.length === 0) return false;
-    if (selectedOnCurrentPage.length === currentPageRows.length) return true;
+    if (selectedOnCurrentPage.length === currentPageIds.length) return true;
     return "indeterminate";
-  }, [selectedProducts, getCurrentPageRows]);
+  }, [selectedProducts, rows]);
 
   /**
    * Handles the selection/deselection of a single product
@@ -205,14 +178,14 @@ const DataTable: React.FC = () => {
         const isSelected = selectedProducts.includes(productId);
         await stockService.bulkUpdateStockStatus([productId], isSelected);
         dispatch(toggleProductSelection(productId));
-        dispatch(getAllProducts());
+        fetchProducts();
       } catch (error) {
         dispatch(setStockUpdateError((error as Error).message));
       } finally {
         dispatch(setIsUpdatingStock(false));
       }
     },
-    [dispatch, selectedProducts]
+    [dispatch, selectedProducts, fetchProducts]
   );
 
   const handleEditProduct = (product: Product) => {
@@ -241,89 +214,73 @@ const DataTable: React.FC = () => {
     deleteProduct(id);
   };
 
-  const handlePageChange = (
-    event: React.ChangeEvent<unknown>,
-    value: number
-  ) => {
-    setPage(value);
-  };
-
-  const getNextSortOrder = (currentOrder: Order): Order => {
-    if (currentOrder === null) return "asc";
-    if (currentOrder === "asc") return "desc";
-    return null;
-  };
-
+  /**
+   * Handles sorting when a column header is clicked
+   */
   const handleSort = (field: keyof Product) => {
     setSortConfig((prevConfig) => {
-      if (prevConfig.primary.field === field) {
-        const nextOrder = getNextSortOrder(prevConfig.primary.order);
-        if (nextOrder === null) {
-          return {
-            primary: {
-              field: prevConfig.secondary.field,
-              order: prevConfig.secondary.order,
-            },
-            secondary: { field: null, order: null },
-          };
+      if (prevConfig.sortBy === field) {
+        // Toggle primary sort order or clear if already desc
+        if (!prevConfig.sortOrder || prevConfig.sortOrder === "asc") {
+          return { ...prevConfig, sortOrder: "desc" };
+        }
+        return {
+          sortBy: prevConfig.secondarySortBy,
+          sortOrder: prevConfig.secondarySortOrder,
+          secondarySortBy: null,
+          secondarySortOrder: null,
+        };
+      }
+
+      if (prevConfig.secondarySortBy === field) {
+        // Toggle secondary sort order or clear if already desc
+        if (
+          !prevConfig.secondarySortOrder ||
+          prevConfig.secondarySortOrder === "asc"
+        ) {
+          return { ...prevConfig, secondarySortOrder: "desc" };
         }
         return {
           ...prevConfig,
-          primary: { field, order: nextOrder },
+          secondarySortBy: null,
+          secondarySortOrder: null,
         };
       }
 
-      if (prevConfig.secondary.field === field) {
-        const nextOrder = getNextSortOrder(prevConfig.secondary.order);
-        if (nextOrder === null) {
-          return {
-            ...prevConfig,
-            secondary: { field: null, order: null },
-          };
-        }
-        return {
-          ...prevConfig,
-          secondary: { field, order: nextOrder },
-        };
+      // Set as primary sort if no sort exists
+      if (!prevConfig.sortBy) {
+        return { ...prevConfig, sortBy: field, sortOrder: "asc" };
       }
 
-      if (!prevConfig.primary.field || prevConfig.primary.order === null) {
-        return {
-          ...prevConfig,
-          primary: { field, order: "asc" },
-        };
-      } else if (
-        !prevConfig.secondary.field ||
-        prevConfig.secondary.order === null
-      ) {
-        return {
-          ...prevConfig,
-          secondary: { field, order: "asc" },
-        };
-      }
-
+      // Set as secondary sort
       return {
         ...prevConfig,
-        secondary: { field, order: "asc" },
+        secondarySortBy: field,
+        secondarySortOrder: "asc",
       };
     });
   };
 
-  const getSortDirection = (field: keyof Product): Order => {
-    if (sortConfig.primary.field === field) {
-      return sortConfig.primary.order;
-    }
-    if (sortConfig.secondary.field === field) {
-      return sortConfig.secondary.order;
-    }
+  /**
+   * Gets the current sort direction for a field
+   */
+  const getSortDirection = (field: keyof Product): "asc" | "desc" | null => {
+    if (sortConfig.sortBy === field) return sortConfig.sortOrder;
+    if (sortConfig.secondarySortBy === field)
+      return sortConfig.secondarySortOrder;
     return null;
+  };
+
+  const handlePageChange = (
+    event: React.ChangeEvent<unknown>,
+    value: number
+  ) => {
+    setPage(value - 1); // Convert to 0-based for backend
   };
 
   const getExpirationColor = (expirationDate: string | null): string => {
     if (!expirationDate) return "inherit";
-
     const daysUntilExpiration = dayjs(expirationDate).diff(dayjs(), "days");
-
     if (daysUntilExpiration < 7) return "#FFC3C3";
     if (daysUntilExpiration < 14) return "#FBFF9C";
     return "#9CFFD2";
@@ -335,8 +292,7 @@ const DataTable: React.FC = () => {
     return "inherit";
   };
 
-  const currentPageRows = getCurrentPageRows();
-  const totalPages = Math.ceil(rows.length / rowsPerPage);
+  const totalPages = Math.ceil(totalElements / rowsPerPage);
 
   return (
     <Box>
@@ -446,7 +402,7 @@ const DataTable: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {currentPageRows.map((row) => (
+            {rows.map((row) => (
               <TableRow
                 key={row.id}
                 sx={{
@@ -519,7 +475,7 @@ const DataTable: React.FC = () => {
       >
         <Pagination
           count={totalPages}
-          page={page}
+          page={page + 1}
           onChange={handlePageChange}
           color="primary"
         />
