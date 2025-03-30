@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Product } from "../../../../types/Product";
-import { useDataTableStyles } from "./DataTable.styles";
 import { DataTableProps } from "./DataTable.types";
 import { useDataTableHandlers } from "./hooks";
 import {
@@ -11,25 +10,39 @@ import {
 import { getAllProducts } from "../../store/productsSlice";
 import { AppDispatch } from "../../../../app/store";
 import dayjs from "dayjs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Checkbox,
+  Button,
+  CircularProgress,
+  Typography,
+  Box,
+  Alert,
+} from "@mui/material";
+import { RootState } from "../../../../app/store";
+import { clearError } from "../../store/productsSlice";
 
 export const DataTable = ({ onEdit }: DataTableProps) => {
   const dispatch = useDispatch<AppDispatch>();
-  const products = useSelector(selectProducts);
+  const products = useSelector(
+    (state: RootState) => state.products.currentProducts
+  );
   const totalElements = useSelector(selectTotalElements);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(
+    useSelector((state: RootState) => state.products.currentPage)
+  );
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const {
-    StyledTable,
-    TableHeader,
-    TableCell,
-    LoadingOverlay,
-    OutOfStockRow,
-    NearExpiryRow,
-  } = useDataTableStyles();
+  const isLoading = useSelector((state: RootState) => state.products.isLoading);
+  const error = useSelector((state: RootState) => state.products.error);
+  const pageSize = useSelector((state: RootState) => state.products.pageSize);
 
   const {
     handleSort,
@@ -46,11 +59,36 @@ export const DataTable = ({ onEdit }: DataTableProps) => {
   });
 
   useEffect(() => {
-    setIsLoading(true);
-    dispatch(getAllProducts({ page: currentPage, sortBy, sortOrder })).finally(
-      () => setIsLoading(false)
+    dispatch(getAllProducts({ page: currentPage, size: pageSize }));
+  }, [dispatch, currentPage, pageSize]);
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+        <CircularProgress />
+      </Box>
     );
-  }, [dispatch, currentPage, sortBy, sortOrder]);
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" onClose={() => dispatch(clearError())}>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (!products.length) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="info">
+          No products found. Try adding some products!
+        </Alert>
+      </Box>
+    );
+  }
 
   const isNearExpiry = (expirationDate: string | null) => {
     if (!expirationDate) return false;
@@ -67,115 +105,131 @@ export const DataTable = ({ onEdit }: DataTableProps) => {
   };
 
   return (
-    <div style={{ position: "relative" }}>
-      {isLoading && (
-        <LoadingOverlay>
-          <div>Loading...</div>
-        </LoadingOverlay>
-      )}
+    <Box sx={{ position: "relative", width: "100%" }}>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  checked={selectedRows.length === products.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedRows(products.map((p) => p.id!));
+                    } else {
+                      setSelectedRows([]);
+                    }
+                  }}
+                />
+              </TableCell>
+              <TableCell onClick={() => handleSort("name")}>Name</TableCell>
+              <TableCell onClick={() => handleSort("category")}>
+                Category
+              </TableCell>
+              <TableCell onClick={() => handleSort("unitPrice")}>
+                Price
+              </TableCell>
+              <TableCell onClick={() => handleSort("expirationDate")}>
+                Expiration Date
+              </TableCell>
+              <TableCell onClick={() => handleSort("quantityInStock")}>
+                Stock
+              </TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {products.map((product) => {
+              const isOutOfStock = product.quantityInStock === 0;
+              const nearExpiry = isNearExpiry(product.expirationDate);
 
-      <StyledTable>
-        <thead>
-          <tr>
-            <TableHeader>
-              <input
-                type="checkbox"
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  if (checked) {
-                    setSelectedRows(products.map((p) => p.id!));
-                  } else {
-                    setSelectedRows([]);
-                  }
-                }}
-                checked={selectedRows.length === products.length}
-              />
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("name")}>Name</TableHeader>
-            <TableHeader onClick={() => handleSort("category")}>
-              Category
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("unitPrice")}>
-              Price
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("expirationDate")}>
-              Expiration Date
-            </TableHeader>
-            <TableHeader onClick={() => handleSort("quantityInStock")}>
-              Stock
-            </TableHeader>
-            <TableHeader>Actions</TableHeader>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((product) => {
-            const isOutOfStock = product.quantityInStock === 0;
-            const RowComponent = isOutOfStock
-              ? OutOfStockRow
-              : isNearExpiry(product.expirationDate)
-              ? NearExpiryRow
-              : "tr";
+              return (
+                <TableRow
+                  key={product.id}
+                  sx={{
+                    textDecoration: isOutOfStock ? "line-through" : "none",
+                    backgroundColor: nearExpiry ? "#ffc3c3" : "inherit",
+                  }}
+                >
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedRows.includes(product.id!)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        if (checked) {
+                          setSelectedRows([...selectedRows, product.id!]);
+                        } else {
+                          setSelectedRows(
+                            selectedRows.filter((id) => id !== product.id)
+                          );
+                        }
+                        handleCheckboxChange(product.id!, checked);
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>{product.name}</TableCell>
+                  <TableCell>{product.category}</TableCell>
+                  <TableCell>{formatCurrency(product.unitPrice)}</TableCell>
+                  <TableCell>{product.expirationDate || "N/A"}</TableCell>
+                  <TableCell>{product.quantityInStock}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => onEdit?.(product)}
+                    >
+                      Edit
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-            return (
-              <RowComponent key={product.id}>
-                <TableCell>
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.includes(product.id!)}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      if (checked) {
-                        setSelectedRows([...selectedRows, product.id!]);
-                      } else {
-                        setSelectedRows(
-                          selectedRows.filter((id) => id !== product.id)
-                        );
-                      }
-                      handleCheckboxChange(product.id!, checked);
-                    }}
-                  />
-                </TableCell>
-                <TableCell>{product.name}</TableCell>
-                <TableCell>{product.category}</TableCell>
-                <TableCell>{formatCurrency(product.unitPrice)}</TableCell>
-                <TableCell>{product.expirationDate || "N/A"}</TableCell>
-                <TableCell>{product.quantityInStock}</TableCell>
-                <TableCell>
-                  <button onClick={() => onEdit?.(product)}>Edit</button>
-                </TableCell>
-              </RowComponent>
-            );
-          })}
-        </tbody>
-      </StyledTable>
+      <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between" }}>
+        <Box>
+          <Button
+            variant="contained"
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 0}
+          >
+            Previous
+          </Button>
+          <Typography component="span" sx={{ mx: 2 }}>
+            Page {currentPage + 1}
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={(currentPage + 1) * 10 >= totalElements}
+          >
+            Next
+          </Button>
+        </Box>
 
-      <div>
-        <button
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 0}
-        >
-          Previous
-        </button>
-        <span>Page {currentPage + 1}</span>
-        <button
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={(currentPage + 1) * 10 >= totalElements}
-        >
-          Next
-        </button>
-      </div>
-
-      {selectedRows.length > 0 && (
-        <div>
-          <button onClick={() => handleBulkAction(selectedRows, true)}>
-            Set Selected Out of Stock
-          </button>
-          <button onClick={() => handleBulkAction(selectedRows, false)}>
-            Set Selected In Stock
-          </button>
-        </div>
-      )}
-    </div>
+        {selectedRows.length > 0 && (
+          <Box>
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={() => handleBulkAction(selectedRows, true)}
+              sx={{ mr: 1 }}
+            >
+              Set Selected Out of Stock
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => handleBulkAction(selectedRows, false)}
+            >
+              Set Selected In Stock
+            </Button>
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 };
 
