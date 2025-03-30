@@ -1,42 +1,18 @@
-import React, { useEffect } from "react";
-import SearchComponent from "./components/SearchComponent";
-import NewProductComponent from "./components/NewProductComponent";
-import { CssBaseline, GlobalStyles } from "@mui/material";
-import { createTheme, ThemeProvider } from "@mui/material/styles";
-import DataTable from "./components/DataTableComponent";
-import ReportTable from "./components/ReportTableComponent";
-import { useDispatch } from "react-redux";
-import { AppDispatch } from "./app/store";
-import { getAllProducts } from "./app/products/productsSlice";
+import { Provider } from "react-redux";
+import { store } from "./app/store";
+import { DataTable } from "./features/products/components/DataTable";
+import { GlobalStyle } from "./styles/GlobalStyle";
 
-const App: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
-
-  useEffect(() => {
-    dispatch(getAllProducts());
-  }, []);
-
-  const theme = createTheme();
+function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <GlobalStyles
-        styles={{
-          body: {
-            margin: 0,
-            padding: 0,
-            overFlowX: "hidden",
-          },
-        }}
-      />
-      <div>
-        <SearchComponent />
-        <NewProductComponent />
+    <Provider store={store}>
+      <GlobalStyle />
+      <div className="container">
+        <h1>Product Management</h1>
         <DataTable />
-        <ReportTable />
       </div>
-    </ThemeProvider>
+    </Provider>
   );
-};
+}
 
 export default App;

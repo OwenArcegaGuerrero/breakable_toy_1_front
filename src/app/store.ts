@@ -1,19 +1,11 @@
 import { configureStore } from "@reduxjs/toolkit";
-import searchNameReducer from "./searchName/searchNameSlice";
-import searchCategoriesReducer from "./searchCategories/searchCategoriesSlice";
-import searchAvailabilityReducer from "./searchAvailability/searchAvailabilitySlice";
-import addModalReducer from "./addModal/addModalSlice";
+import productsReducer from "../features/products/store/productsSlice";
 import dataTableReducer from "./dataTable/dataTableSlice";
-import productsReducer from "./products/productsSlice";
 
 export const store = configureStore({
   reducer: {
-    searchName: searchNameReducer,
-    searchCategories: searchCategoriesReducer,
-    searchAvailability: searchAvailabilityReducer,
-    addModal: addModalReducer,
-    dataTable: dataTableReducer,
     products: productsReducer,
+    dataTable: dataTableReducer,
   },
 });
 
